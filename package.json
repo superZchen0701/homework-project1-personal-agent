@@ -1,0 +1,23 @@
+{
+  "name": "Personal Agent",
+  "version": "1.0.0",
+  "description": "个人助手 Agent",
+  "keywords": [],
+  "author": "chaozhi Chen",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "start": "node cli.js",
+    "cli": "node cli.js",
+    "test": "echo \"暂无测试，使用 pnpm start 进入 CLI 体验\" && exit 0"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "openai": "^7.5.0"
+  }
+}
