@@ -8,6 +8,7 @@
  * 具体范式的"思考-行动"流程在子类 run() 中实现
  */
 import { llmClient, DEFAULT_MODEL, chatCompletion } from './llm.js';
+import { agentTrace } from './agent-trace.js';
 
 // Function Calling 全局开关：读 .env 的 ENABLE_FUNCTION_CALLING，默认关闭（走 ReAct 文本模式）
 // 依赖上方 import llm.js 先行执行 dotenv.config()，故此处读 env 安全
@@ -48,7 +49,12 @@ class Agent {
     // this.model 作为 Agent 层覆盖项；...options 在其后展开，调用方仍可进一步覆盖
     // 流式策略：跟随全局 ENABLE_STREAM 开关。流式开启时 LLM 原文在生成中实时输出，
     // 各范式须跳过对内容本身的 console.log 以保证"内容只打印一次"（见各 agent 的 DEFAULT_STREAM 分支）
-    const completion = await chatCompletion(messages, tools, { model: this.model, ...options });
+    // traceLabel：Trace 日志中标识本次调用来自哪个 Agent（如 ReAct._sendMessages）
+    const completion = await chatCompletion(messages, tools, {
+      model: this.model,
+      traceLabel: `${this.name}._sendMessages`,
+      ...options,
+    });
     return completion.choices[0].message;
   }
 
@@ -77,7 +83,16 @@ class Agent {
       } catch {
         console.error(`⚠️ 工具 '${toolName}' 参数不是合法JSON: ${tc.function.arguments}`);
       }
-      const result = await this.toolRegistry.execute_tool(toolName, args);
+      // Trace：记录工具调用的输入输出与耗时
+      const span = agentTrace.beginTool(this.name, toolName, args);
+      let result;
+      try {
+        result = await this.toolRegistry.execute_tool(toolName, args);
+        span.end({ result });
+      } catch (err) {
+        span.end({ error: err });
+        throw err;
+      }
       console.log(`  🔧 [Tool] ${toolName}(${JSON.stringify(args)}) → ${String(result).slice(0, 120)}`);
       toolMessages.push({
         role: 'tool',

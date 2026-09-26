@@ -11,6 +11,7 @@ import readline from 'readline';
 import { ToolRegistry } from './tools/registry.js';
 import { MemoryManager } from './memory/manager.js';
 import { AgentScheduler } from './scheduler/index.js';
+import { agentTrace } from './core/agent-trace.js';
 
 // 内置工具
 import { calculatorTool } from './tools/builtin/calculator.js';
@@ -36,6 +37,7 @@ const HELP = `
   /help           查看帮助
   /tools          列出已注册工具
   /memory         查看记忆统计
+  /trace          查看 Trace 统计（LLM/工具调用次数、Token、耗时）
   /clear          清屏
   /exit 或 /quit  退出
 其他输入视为用户问题，由调度中心处理。
@@ -121,6 +123,10 @@ async function startCLI() {
           break;
         case '/memory':
           console.log('\n记忆统计:', ctx.memoryManager.stats());
+          console.log('');
+          break;
+        case '/trace':
+          agentTrace.printSummary();
           console.log('');
           break;
         case '/clear':

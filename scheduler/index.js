@@ -90,7 +90,7 @@ class AgentScheduler {
       const completion = await chatCompletion(
         [{ role: 'user', content: prompt }],
         null,
-        { stream: false }
+        { stream: false, traceLabel: 'scheduler._classifyComplexity' }
       );
       const answer = (completion.choices[0].message.content || '').trim().toLowerCase();
       // 兼容 LLM 偶发输出变体
@@ -208,7 +208,10 @@ ${plan
       const completion = await chatCompletion(
         [{ role: 'user', content: summaryPrompt }],
         null,
-        streamed ? {} : { stream: false }
+        {
+          ...(streamed ? {} : { stream: false }),
+          traceLabel: 'scheduler.summarize',
+        }
       );
       const answer = completion.choices[0].message.content || stepResults.join('\n\n');
       return { answer, streamed };

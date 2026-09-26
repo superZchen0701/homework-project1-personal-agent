@@ -36,7 +36,6 @@ homework-project1-personal-agent/
 ├── scheduler/
 │   └── index.js                  # 调度中心：复杂度判断 + 三范式混合
 ├── cli.js                        # CLI 交互入口
-├── reference/                    # 参考代码（Day2-Day5 学习笔记）
 ├── .env.example                  # 环境变量示例
 ├── package.json
 └── README.md

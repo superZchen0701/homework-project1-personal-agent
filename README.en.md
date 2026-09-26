@@ -36,7 +36,6 @@ homework-project1-personal-agent/
 ├── scheduler/
 │   └── index.js                  # Scheduler: complexity classification + three-paradigm hybrid
 ├── cli.js                        # CLI entry point
-├── reference/                    # Reference code (Day2-Day5 learning notes)
 ├── .env.example                  # Environment variable example
 ├── package.json
 └── README.md

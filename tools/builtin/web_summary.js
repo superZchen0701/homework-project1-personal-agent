@@ -98,7 +98,7 @@ ${content}`;
       const completion = await chatCompletion(
         [{ role: 'user', content: prompt }],
         null,
-        { stream: false }
+        { stream: false, traceLabel: 'web_summary._summarize' }
       );
       const result = (completion.choices[0].message.content || '').trim();
       return result ? `【${url} 摘要】\n${result}` : '摘要为空';

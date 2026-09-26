@@ -10,6 +10,7 @@ import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { agentTrace } from './agent-trace.js';
 
 // 加载根目录 .env（本文件位于 core/，故上一级即项目根）
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -45,26 +46,40 @@ export const DEFAULT_STREAM = process.env.ENABLE_STREAM === 'true';
  *
  * @param {Array<{role:string,content:string}>} messages
  * @param {Array} [tools]      Function Calling 工具 schema，不传则不启用
- * @param {object} [options]   额外参数，如 { stream:true }
+ * @param {object} [options]   额外参数，如 { stream:true }、{ traceLabel:'ReAct._sendMessages' }
+ *                             traceLabel 用于 Trace 日志标识调用来源，下发 API 前会被剔除
  * @returns {Promise<object>}  与 SDK 非流式 completion 结构兼容的对象
  */
 export async function chatCompletion(messages, tools, options = {}) {
-  const useStream = options.stream ?? DEFAULT_STREAM;
-  if (useStream) {
-    return await _streamCompletion(messages, tools, options);
+  // 剥离 Trace 专用字段，避免透传给 API 导致 400
+  const { traceLabel = 'chatCompletion', ...sdkOptions } = options;
+  const useStream = sdkOptions.stream ?? DEFAULT_STREAM;
+  const span = agentTrace.beginLLM(traceLabel, { messages, tools, stream: useStream });
+  try {
+    if (useStream) {
+      const completion = await _streamCompletion(messages, tools, sdkOptions);
+      span.end({ result: completion.choices[0].message, usage: completion.usage });
+      return completion;
+    }
+    const completion = await llmClient.chat.completions.create({
+      model: DEFAULT_MODEL,
+      messages,
+      ...(tools && tools.length ? { tools } : {}),
+      ...sdkOptions,
+    });
+    span.end({ result: completion.choices[0].message, usage: completion.usage });
+    return completion;
+  } catch (err) {
+    span.end({ error: err });
+    throw err;
   }
-  const completion = await llmClient.chat.completions.create({
-    model: DEFAULT_MODEL,
-    messages,
-    ...(tools && tools.length ? { tools } : {}),
-    ...options,
-  });
-  return completion;
 }
 
 /**
  * 流式调用：迭代 chunks，实时打印 delta，累积成完整 message
  * 兼容 Function Calling：tool_calls 在流式中分多 chunk 到达，按 index 累积拼接
+ * Token 统计：请求 stream_options.include_usage，API 会在最后一个 chunk 附带 usage
+ *           （部分兼容 API 不支持时无 usage 字段，Trace 层自动退化为字符估算）
  */
 async function _streamCompletion(messages, tools, options = {}) {
   const stream = await llmClient.chat.completions.create({
@@ -73,14 +88,18 @@ async function _streamCompletion(messages, tools, options = {}) {
     ...(tools && tools.length ? { tools } : {}),
     ...options,
     stream: true,
+    stream_options: { include_usage: true },
   });
 
   let content = '';
   let role = 'assistant';
+  let usage; // 最后一个 chunk 携带的 token 统计
   // tool_calls 按 index 累积：流式时每个 tool_call 的 id/name/arguments 可能分多 chunk 到达
   const toolCallsAcc = [];
 
   for await (const chunk of stream) {
+    // include_usage 的最后一个 chunk：choices 为空数组，仅含 usage
+    if (chunk.usage) usage = chunk.usage;
     const delta = chunk.choices[0]?.delta;
     if (!delta) continue;
     if (delta.role) role = delta.role;
@@ -106,9 +125,9 @@ async function _streamCompletion(messages, tools, options = {}) {
   // 流结束补一个换行，避免后续日志贴边
   process.stdout.write('\n');
 
-  // 构造与非流式一致的返回结构
+  // 构造与非流式一致的返回结构（usage 透传供 Trace 记录）
   const message = { role, content };
   const validToolCalls = toolCallsAcc.filter(Boolean);
   if (validToolCalls.length) message.tool_calls = validToolCalls;
-  return { choices: [{ message }] };
+  return { choices: [{ message }], usage };
 }
